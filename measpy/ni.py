@@ -19,12 +19,14 @@ import numpy as np
 import h5py
 
 from ._tools import siglist_to_array, t_min, _add_N_data, H5file_valid
-from .signal import Signal
+from .signal import Signal, SignalType
 
 def _n_to_ain(n):
     return 'ai'+str(n-1)
 def _n_to_aon(n):
     return 'ao'+str(n-1)
+def _n_to_don(n):
+    return 'port'+str(n-1)
 
 def ni_run_measurement(M, filename=None, duration="default"):
     """
@@ -217,17 +219,24 @@ class ni_callback_measurement:
             if self.M.out_sig is not None:
                 self.nsamps = int(round(self.M.dur * self.M.fs))
                 self.outtask = nidaqmx.Task(new_task_name="out")  # write task
+                
+                if self.M.out_sig[0].type == SignalType.ANALOG:
+                    # Set up the write tasks, use the sample clock of the Analog input if possible
+                    for i, n in enumerate(self.M.out_map):
+                        self.outtask.ao_channels.add_ao_voltage_chan(
+                            physical_channel=self.M.out_device + "/" + _n_to_aon(n),
+                            min_val=-self.M.out_range[i],
+                            max_val=self.M.out_range[i],
+                            units=niconst.VoltageUnits.VOLTS,
+                        )
+                elif self.M.out_sig[0].type == SignalType.DIGITAL:
+                    for i, n in enumerate(self.M.out_map):
+                        self.outtask.do_channels.add_do_chan(
+                            lines=self.M.out_device + "/" + _n_to_don(n),
+                            line_grouping=niconst.LineGrouping.CHAN_FOR_ALL_LINES
+                        )
 
-                # Set up the write tasks, use the sample clock of the Analog input if possible
-                for i, n in enumerate(self.M.out_map):
-                    self.outtask.ao_channels.add_ao_voltage_chan(
-                        physical_channel=self.M.out_device + "/" + _n_to_aon(n),
-                        min_val=-self.M.out_range[i],
-                        max_val=self.M.out_range[i],
-                        units=niconst.VoltageUnits.VOLTS,
-                    )
-
-                if self.M.in_device.startswith("myDAQ"):
+                if self.M.in_device.startswith("myDAQ") and self.M.out_sig.type == SignalType.ANALOG:
                     # If the device is a myDAQ card, we keep most default values
                     # The myDAQ devices are set up separately because
                     # there is no error messages when setting up properties
@@ -271,8 +280,12 @@ class ni_callback_measurement:
                             samps_per_chan=self.nsamps,
                         )
 
-                if len(self.M.out_map) == 1:
-                    self.outtask.write(self.outx[:, 0], auto_start=False)
+                print("values: ",self.outx[:, 0])
+                if len(self.M.out_map) == 1:# !!! WORKING BUT NEED TO IMPROVE !!!
+                    if self.M.out_sig[0].type == SignalType.DIGITAL:
+                        self.outtask.write(list(map(int,map(round,self.outx[:, 0]))), auto_start=False) 
+                    else:
+                        self.outtask.write(self.outx[:, 0], auto_start=False)
                 else:
                     # If there are more than one output channel,
                     # the outx.T array argument produces an error.
@@ -333,6 +346,8 @@ class ni_callback_measurement:
             while (
                 not stop.is_set() and self.buffer_captured < numBuffersToCapture
             ):
+                # print(self.buffer_captured,"<",numBuffersToCapture)
+                # print(f"will sleep for {time_to_fill_buffer}s")
                 sleep(time_to_fill_buffer)
         except KeyboardInterrupt:
             pass
