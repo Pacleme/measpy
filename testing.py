@@ -239,7 +239,7 @@ def matchResultsSpeedUp(sigValues: sig.Signal, sigAddr: sig.Signal, rate: float)
 
     return sig.Signal.pack(sigList)
 
-def matchResultsSpeedUpV2(sigValues: sig.Signal, sigAddr: sig.Signal, rate: float)->sig.Signal:
+def matchResultsSpeedUpV2(sigValues: sig.Signal, sigAddr: sig.Signal, rate: float, calc: str = "average")->sig.Signal:
     """
     :param sigValues: signal acquired
     :type sigValues: measpy.signal.Signal
@@ -247,7 +247,10 @@ def matchResultsSpeedUpV2(sigValues: sig.Signal, sigAddr: sig.Signal, rate: floa
     :type sigAddr: measpy.signal.Signal
     :param rate: rate of values to keep per address, must be between 0 and 1
     :type rate: float
+    :param calc: calcul to get a single value from multiple per address. Can be "average" or "mean". "average" by default.
+    :type calc: str
     :return: Clean signal with one value per time
+    :rtype: measpy.signal.Signal
     """
     # if(len(sigValues.values) != len(sigAddr.values)):
     #     raise ValueError(f"sigValues and sigAddr do not have the same length. nb values : {len(sigValues.values)}, nb addr : {len(sigAddr.values)}")
@@ -261,15 +264,23 @@ def matchResultsSpeedUpV2(sigValues: sig.Signal, sigAddr: sig.Signal, rate: floa
     print(resultSig_raw)
     print("nb: ",nb)
     print("it: ",int(len(sigValues.values)/nb))
-    from_one_sensor = []
-    for i in range(int(len(sigAddr.values)/nb)):
-        
 
-        from_one_sensor = sigValues.values[int(round(i*nb)):int(round((i+1)*nb))]
-        if diff != 0:
-            from_one_sensor = from_one_sensor[diff:-diff]
-        sensor = sigAddr.values[int((i*nb)%len(sigAddr.values))]
-        resultSig_raw[sensor].append(sum(from_one_sensor)/len(from_one_sensor))
+    cleanValues = np.array(sigValues.values)
+    if len(cleanValues)%len(sigAddr.values) != 0:
+        cleanValues = cleanValues[:-(len(cleanValues)%len(sigAddr.values))]
+    cleanValues = np.split(cleanValues, len(cleanValues)/nb)
+    cleanValues = np.array(cleanValues)
+    if diff != 0:
+        cleanValues = cleanValues[:,diff:-diff]
+
+    if      calc == "average"   :
+        cleanValues = np.average(cleanValues,axis=1)
+    elif    calc == "mean"      :
+        cleanValues = np.mean(cleanValues,axis=1)
+
+    for i in range(len(cleanValues)):
+        sensor = sigAddr.values[int((i)%len(sigAddr.values))]
+        resultSig_raw[sensor].append(cleanValues[i])
 
     sizes = []
     for vals in resultSig_raw.values():
@@ -304,12 +315,12 @@ def testMatchResults():
     # ar = np.array([1,2,3,4,5,6,7,8])
     # for i in range(len(ar)):
     #     print(i," - ",ar[i])
-    FB = 300
+    FB = 10000
     FS = 20000
     FS = 1000000
 
     adrs = [0,1,2,4,8,16,32]
-    adrs = list(range(0,64))
+    adrs = list(range(0,32))
     # adrs = list(range(64))
     # adrs = [0,1,2,4]
     adrs,NFS = scaleAddresses(adrs, FB, FS)
@@ -322,7 +333,7 @@ def testMatchResults():
     # print(adr_sig.raw)
     # print(scaleAddresses(adrs, FS, FB))
     t0 = time.time()
-    res = matchResultsSpeedUp(sigValues=val_sig, sigAddr=adr_sig, rate=1)
+    res = matchResultsSpeedUpV2(sigValues=val_sig, sigAddr=adr_sig, rate=1)
     t1 = time.time()
 
     print(f"matchResults took {t1-t0}s")

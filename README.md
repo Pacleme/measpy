@@ -16,9 +16,9 @@ Ajout de sortie digital
     - Très lent lorsque FS et FB sont proches
     - Idée générale : parcours les valeurs par adresse, regroupe d'un coup toutes les valeurs mesurées sur une même adresse.
 - Version 3 `matchResultsSpeedUpV2()` :
-    - En cours de dev
-    - Commencement
-    - Idée générale : parcourir les adresses et aller chercher leurs valeurs associées.
+    - Pas encore très bien testé
+    - à priori fonctionnel et très rapide dans tous les cas.
+    - Idée générale : utilisation des fonctions de numpy le plus possible.
 - 
 ### Algo ScaleAddresses
 - Version 1 `scaleAddresses()` :
